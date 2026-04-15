@@ -69,8 +69,8 @@ float erreurVitesse, deriveVitesse = 0, erreurPrecedentVitesse = 0;
 float VitesseConsigne = 0.0;
 
 
-float Ec, CO1 = 0.166, CO2 = 0.06;                                                            // Sortie du correcteur
-int dutyCyclePositif, dutyCycleNegatif, offsetplusG, offsetplusD, offsetmoinsG, offsetmoinsD; // PWM moteurs
+float Ec ,EcG, EcD, CO1Positif = 0.143, CO2Positif = 0.087, CO1Negatif = 0.098, CO2Negatif = 0.16, CoeffPositif = 0.87, CoeffNegatif = 0.876;                                                            // Sortie du correcteur
+int dutyCyclePositifG, dutyCyclePositifD,dutyCycleNegatifG, dutyCycleNegatifD,  offsetplusG, offsetplusD, offsetmoinsG, offsetmoinsD; // PWM moteurs
 
 
 // --- PWM ---
@@ -82,11 +82,15 @@ unsigned char MOTDmoins = 3;    // Canal PWM moteur droit  -
 unsigned char resolution = 10;  // Résolution 10 bits (0–1023)
 
 
+
+
 // --- Tâche de contrôle du gyropode ---
 void controle(void *parameters)
 {
   TickType_t xLastWakeTime;            // Temps de réveil FreeRTOS
   xLastWakeTime = xTaskGetTickCount(); // Initialisation
+
+
 
 
   while (1)
@@ -102,17 +106,25 @@ void controle(void *parameters)
     TetaGF = A * TetaG + B * TetaGF;                    // Filtre passe-bas
 
 
+
+
     // Calcul angle via gyroscope
     TetaW = g.gyro.z * Tau / 1000;   // Intégration gyro
     TetaWF = A * TetaW + B * TetaWF; // Filtre passe-bas
+
+
 
 
     // Fusion des deux angles
     Teta = TetaWF + TetaGF; // Angle final (radians)
 
 
+
+
     TetaMG = encoderL.getCount(); // Position Angulaire Moteur Gauche
     TetaMD = encoderR.getCount(); // Position Angulaire Moteur Droit
+
+
 
 
     deltaEncodeurMG = ((float)TetaMG - (float)encodeur_precedentMG) / ((Te / 1000.0)); // VitesseMoteur Gauche en (rad/s)
@@ -123,11 +135,17 @@ void controle(void *parameters)
     deltaEncodeurMD_Angulaire = deltaEncodeurMD * (2.0 * PI / Nb_de_ticks); // Vitesse Angulaire Moteur Droit en (rad/s)
 
 
+
+
     deltaMoyenne = (deltaEncodeurMG_Angulaire + deltaEncodeurMD_Angulaire) / 2.0;
+
+
 
 
     vitesseLineaire = deltaMoyenne * RayonRoue; // Vitesse Linéaire des Moteurs en (m/s)
     vitesseLineaireF = AVitesse * vitesseLineaire + BVitesse * vitesseLineaireF;
+
+
 
 
     // --- Asservissement du Gyropode ---
@@ -135,6 +153,8 @@ void controle(void *parameters)
     erreurVitesse = VitesseConsigne - vitesseLineaireF;     // Erreur de la Vitesse
     deriveVitesse = erreurVitesse - erreurPrecedentVitesse; // Dérivé du kdVitesse
     erreurPrecedentVitesse = erreurVitesse;
+
+
 
 
     // Asservissement Vitesse
@@ -151,28 +171,43 @@ void controle(void *parameters)
     Ec = -kpPosition * erreurTeta + kdPosition * g.gyro.z; // Sortie du correcteur
 
 
-    if (Ec > 0)
-      Ec += CO1; // Compensation Force de frottement Sec
-    if (Ec < 0)
-      Ec -= CO2; // Compensation Force de frottement Sec
 
 
-    if (Ec > 0.45)
-      Ec = 0.45; // Saturation à 95% du programme
-    if (Ec < -0.45)
-      Ec = -0.45;
+    EcG = Ec;
+    EcD = Ec;
+
+
+    if (EcG > 0) EcG += CO1Positif; // Compensation Force de frottement Sec EcG
+    if (EcG < 0) EcG -= CO1Negatif; // Compensation Force de frottement Sec
+
+
+
+
+    if (EcD > 0) EcD += CO2Positif; // Compensation Force de frottement Sec EcD
+    if (EcD < 0) EcD -= CO2Negatif; // Compensation Force de frottement Sec
+
+
+    if (EcG >0.45) EcG = 0.45; // Saturation à 95% du programme EcG
+    if (EcG <-0.45) EcG = -0.45;
+   
+    if (EcD >= 0.45) EcD = 0.45; // Saturation à 95% du programme EcD
+    if (EcD < -0.45) EcD = -0.45;
 
 
     // --- Conversion en PWM ---
-    dutyCyclePositif = (0.5 + Ec) * 1023; // PWM sens +
-    dutyCycleNegatif = (0.5 - Ec) * 1023; // PWM sens -
+    dutyCyclePositifG = (0.5 + EcG) * 1023 * CoeffPositif;
+    dutyCyclePositifD = (0.5 + EcD) * 1023; // PWM sens +
+   
+    dutyCycleNegatifG = (0.5 - EcG) * 1023;
+    dutyCycleNegatifD = (0.5 - EcD) * 1023* CoeffNegatif; // PWM sens +
 
 
-    // --- Envoi PWM moteurs ---
-    ledcWrite(MOTGplus, dutyCyclePositif + offsetplusG); // Moteur droit  +
-    ledcWrite(MOTDplus, dutyCyclePositif + offsetplusD);
-    ledcWrite(MOTGmoins, dutyCycleNegatif + offsetmoinsG); // Moteur gauche -
-    ledcWrite(MOTDmoins, dutyCycleNegatif + offsetmoinsD); // Moteur droit  -
+    ledcWrite(MOTGplus, dutyCyclePositifG + offsetplusG); // Moteur droit  +
+    ledcWrite(MOTDplus, dutyCyclePositifD + offsetplusD);
+    ledcWrite(MOTGmoins, dutyCycleNegatifG + offsetmoinsG); // Moteur gauche -
+    ledcWrite(MOTDmoins, dutyCycleNegatifD + offsetmoinsD); // Moteur droit  -
+
+
 
 
     encodeur_precedentMG = TetaMG; // Memorisation TetaMG
@@ -251,6 +286,8 @@ void setup()
 }
 
 
+
+
 // --- Réception commandes série ---
 void reception(char ch)
 {
@@ -261,10 +298,14 @@ void reception(char ch)
   int index, length;
 
 
+
+
   if (ch == '*')
   {
     index = chaine.indexOf(' ');
     length = chaine.length();
+
+
 
 
     if (index == -1)
@@ -279,6 +320,8 @@ void reception(char ch)
     }
 
 
+
+
     // --- Commandes dynamiques ---
     if (commande == "Tau") // Acquisition Valeur du Tau via TermMecatro
     {
@@ -286,6 +329,8 @@ void reception(char ch)
       A = 1 / (1 + Tau / Te);
       B = Tau / Te * A;
     }
+
+
 
 
     if (commande == "TauVitesse") // Acquisition Valeur du Tau via TermMecatro
@@ -296,6 +341,8 @@ void reception(char ch)
     }
 
 
+
+
     if (commande == "Te") // Acquisition Valeur du Te via TermMecatro
     {
       Te = valeur.toInt();
@@ -304,22 +351,27 @@ void reception(char ch)
     }
 
 
-    if (commande == "kpPosition")
-      kpPosition = valeur.toFloat(); // Acquisition Valeur du kpPosition via TermMecatro
-    if (commande == "kdPosition")
-      kdPosition = valeur.toFloat(); // Acquisition Valeur du kdPosition via TermMecatro
 
 
-    if (commande == "kpVitesse")
-      kpVitesse = valeur.toFloat() / 100; // Acquisition Valeur du kpVitesse via TermMecatro
-    if (commande == "kdVitesse")
-      kdVitesse = valeur.toFloat() / 1000; // Acquisition Valeur du kdVitesse via TermMecatro
+    if (commande == "kpPosition") kpPosition = valeur.toFloat() /100; // Acquisition Valeur du kpPosition via TermMecatro
+    if (commande == "kdPosition") kdPosition = valeur.toFloat() /1000; // Acquisition Valeur du kdPosition via TermMecatro
+     
+    if (commande == "kpVitesse") kpVitesse = valeur.toFloat() / 100; // Acquisition Valeur du kpVitesse via TermMecatro
+    if (commande == "kdVitesse") kdVitesse = valeur.toFloat() / 1000; // Acquisition Valeur du kdVitesse via TermMecatro
+     
+    if (commande == "CO1Positif") CO1Positif = valeur.toFloat()/1000; // Compensation des forces de Frottements
+    if (commande == "CO2Positif") CO2Positif = valeur.toFloat()/1000; // Compensation des forces de Frottements
 
 
-    if (commande == "CO1")
-      CO1 = valeur.toFloat(); // Compensation des forces de Frottements
-    if (commande == "CO2")
-      CO2 = valeur.toFloat(); // Compensation des forces de Frottements
+
+
+    if (commande == "CO1Negatif") CO1Negatif = valeur.toFloat()/1000; // Compensation des forces de Frottements
+    if (commande == "CO2Negatif") CO2Negatif = valeur.toFloat()/1000; // Compensation des forces de Frottements
+    if (commande == "Coeff") CoeffNegatif = valeur.toFloat()/1000; // Compensation des forces de Frottements
+
+
+
+
     if (commande == "offsetgaucheplus")
       offsetplusG = valeur.toFloat();
     if (commande == "Z")
@@ -341,7 +393,11 @@ void reception(char ch)
       offsetplusG = 0;
 
 
+
+
     Serial.printf("%.2f %f\n", kpVitesse, kdVitesse);
+
+
 
 
     chaine = "";
@@ -351,6 +407,8 @@ void reception(char ch)
     chaine += ch;
   }
 }
+
+
 
 
 // --- Boucle principale ---
@@ -367,10 +425,10 @@ void loop()
     SerialBT.printf("w%f\n*", valeurbatterie);
     SerialBT.printf("b%f\n*", kpVitesse);
     SerialBT.printf("p%f\n*", kdVitesse);
-   
-    SerialBT.printf("G%f*", vitesseLineaireF);
+
+
+
+
     FlagCalcul = 0;
   }
 }
-
-
