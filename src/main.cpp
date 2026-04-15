@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <BluetoothSerial.h>
 #include <Adafruit_MPU6050.h>
@@ -160,8 +159,6 @@ void controle(void *parameters)
 
     // --- Envoi PWM moteurs ---
     ledcWrite(MOTGplus, dutyCycle1);                                      // Moteur droit  +
-
-
     ledcWrite(MOTDplus, dutyCycle1);                        
     ledcWrite(MOTGmoins, dutyCycle2);                                     // Moteur gauche -
     ledcWrite(MOTDmoins, dutyCycle2);                                     // Moteur droit  -
@@ -197,7 +194,7 @@ void controle(void *parameters)
 void setup()
 {
   Serial.begin(115200);
-  SerialBT.begin("Gyro_AHM_TOURE");                                                   // Initialisation Bluetooth
+  SerialBT.begin("Gyro_AHM_TOURE");
   encoderL.attachHalfQuad(34, 35);
   encoderR.attachHalfQuad(27, 13);
   // --- Configuration PWM ---
@@ -256,14 +253,11 @@ void reception(char ch)
   String valeur;
   int index, length;
 
-  Serial.printf("C %c\n", ch);
 
   if (ch == '*')
   {
     index = chaine.indexOf(' ');
     length = chaine.length();
-
-
 
 
     if (index == -1)
@@ -274,10 +268,11 @@ void reception(char ch)
     else
     {
       commande = chaine.substring(0, index);
-      Serial.printf("Commande : %s \n", commande.c_str());
       valeur = chaine.substring(index + 1, length);
-      Serial.printf("Valeur : %s \n", valeur.c_str()); 
+     
     }
+
+
 
 
     // --- Commandes dynamiques ---
@@ -286,6 +281,14 @@ void reception(char ch)
       Tau = valeur.toFloat();
       A = 1 / (1 + Tau / Te);
       B = Tau / Te * A;
+    }
+
+
+    if (commande == "TauVitesse")                                                      // Acquisition Valeur du Tau via TermMecatro
+    {
+      TauVitesse = valeur.toFloat();
+      AVitesse = 1 / (1 + TauVitesse / Te);
+      BVitesse = TauVitesse / Te * AVitesse;
     }
 
 
@@ -301,16 +304,18 @@ void reception(char ch)
     if (commande == "kdPosition") kdPosition = valeur.toFloat();               // Acquisition Valeur du kdPosition via TermMecatro
 
 
-    if (commande == "kpVitesse")  kpVitesse = valeur.toFloat();                // Acquisition Valeur du kpVitesse via TermMecatro
-    if (commande == "kdVitesse")  kdVitesse = valeur.toFloat();                // Acquisition Valeur du kdVitesse via TermMecatro
-    if (commande == "kiVitesse")  kiVitesse = valeur.toFloat();                // Acquisition Valeur du kiVitesse via TermMecatro
+    if (commande == "kpVitesse")  kpVitesse = valeur.toFloat()/100;                // Acquisition Valeur du kpVitesse via TermMecatro
+    if (commande == "kdVitesse")  kdVitesse = valeur.toFloat()/1000;                // Acquisition Valeur du kdVitesse via TermMecatro
+    if (commande == "kiVitesse")  kiVitesse = valeur.toFloat()/10000;                // Acquisition Valeur du kiVitesse via TermMecatro
    
-    if (commande == "CO1") CO1 = valeur.toFloat();
-    if (commande == "CO2") CO2 = valeur.toFloat();
+    if (commande == "CO1")        CO1 = valeur.toFloat();
+    if (commande == "CO2")        CO2 = valeur.toFloat();
    
-    if (commande == "TauVitesse") TauVitesse = valeur.toFloat();
+    if (commande == "Z")          TetaConsigne = 0.15;
+    else if (commande == "z")     TetaConsigne = 0.0;  
 
 
+    //Serial.printf("%.2f\n",TetaConsigne);
     chaine = "";
   }
   else
@@ -322,20 +327,27 @@ void reception(char ch)
 
 
 
+
+
 // --- Boucle principale ---
 void loop()
 {
-  while (SerialBT.available())
+  while (SerialBT.available() > 0)
   {
     reception(SerialBT.read());
   }
+
+
   if (FlagCalcul == 1)
   {
-    //Serial.printf("%f %f %f \n",kpVitesse,Ec, Teta);
- 
+    Serial.printf("Teta : %.2f | TetaConsigne : %.2f \n",Teta,TetaConsigne);
     FlagCalcul = 0;
   }
 }
 
 
 // --- Lecture série ---
+
+
+
+
