@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include <BluetoothSerial.h>
 #include <Adafruit_MPU6050.h>
@@ -196,6 +197,7 @@ void controle(void *parameters)
 void setup()
 {
   Serial.begin(115200);
+  SerialBT.begin("Gyro_AHM_TOURE");                                                   // Initialisation Bluetooth
   encoderL.attachHalfQuad(34, 35);
   encoderR.attachHalfQuad(27, 13);
   // --- Configuration PWM ---
@@ -254,8 +256,9 @@ void reception(char ch)
   String valeur;
   int index, length;
 
+  Serial.printf("C %c\n", ch);
 
-  if ((ch == 13) or (ch == 10))
+  if (ch == '*')
   {
     index = chaine.indexOf(' ');
     length = chaine.length();
@@ -271,7 +274,9 @@ void reception(char ch)
     else
     {
       commande = chaine.substring(0, index);
+      Serial.printf("Commande : %s \n", commande.c_str());
       valeur = chaine.substring(index + 1, length);
+      Serial.printf("Valeur : %s \n", valeur.c_str()); 
     }
 
 
@@ -282,8 +287,6 @@ void reception(char ch)
       A = 1 / (1 + Tau / Te);
       B = Tau / Te * A;
     }
-
-
 
 
     if (commande == "Te")                                                      // Acquisition Valeur du Te via TermMecatro
@@ -322,9 +325,13 @@ void reception(char ch)
 // --- Boucle principale ---
 void loop()
 {
+  while (SerialBT.available())
+  {
+    reception(SerialBT.read());
+  }
   if (FlagCalcul == 1)
   {
-    Serial.printf("%f %f %f \n",integraleVitesse,Ec, Teta);
+    //Serial.printf("%f %f %f \n",kpVitesse,Ec, Teta);
  
     FlagCalcul = 0;
   }
@@ -332,10 +339,3 @@ void loop()
 
 
 // --- Lecture série ---
-void serialEvent()
-{
-  while (Serial.available() > 0)
-  {
-    reception(Serial.read());
-  }
-}
