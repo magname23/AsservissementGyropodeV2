@@ -62,10 +62,10 @@ const float Nb_de_ticks = 748.0;
   // Position
 float kpPosition =3.19, kdPosition = 0.034;
 float erreurTeta;
-float TetaConsigne = 0.0 ;
+volatile float TetaConsigne = 0.0 ;
   // Vitesse
-float kpVitesse = 7.76 , kdVitesse = 0.235 , kiVitesse = 0.001;
-float erreurVitesse, deriveVitesse = 0, erreurPrecedentVitesse, integraleVitesse=0;
+float kpVitesse = 8.75 , kdVitesse = 2.593 , kiVitesse = 0.0;
+float erreurVitesse, deriveVitesse = 0, erreurPrecedentVitesse=0, integraleVitesse=0;
 float VitesseConsigne = 0.0;
 
 
@@ -130,12 +130,15 @@ void controle(void *parameters)
     // --- Asservissement du Gyropode ---    
       // Calcul des variables de Asservissement de Vitesse
     erreurVitesse = VitesseConsigne - vitesseLineaireF;                                 // Erreur de la Vitesse
-    deriveVitesse = erreurVitesse + erreurPrecedentVitesse;               // Dérivé du kdVitesse
+    deriveVitesse = erreurVitesse - erreurPrecedentVitesse;               // Dérivé du kdVitesse
     erreurPrecedentVitesse = erreurVitesse;
     integraleVitesse += erreurVitesse;                                    // Intégrale du kiVitesse
    
       // Asservissement Vitesse
-    TetaConsigne = kpVitesse*erreurVitesse - kdVitesse*deriveVitesse+kiVitesse*integraleVitesse;
+    TetaConsigne = kpVitesse*erreurVitesse + kdVitesse*deriveVitesse+kiVitesse*integraleVitesse;
+
+
+    TetaConsigne = constrain(TetaConsigne, -10.0/180*PI, 10.0/180*PI);
    
     erreurTeta = TetaConsigne - Teta;                                     // Erreur de Position
 
@@ -144,7 +147,7 @@ void controle(void *parameters)
     Ec = -kpPosition * erreurTeta + kdPosition * g.gyro.z ;                // Sortie du correcteur
    
     if(Ec > 0) Ec +=CO1;                                                   // Compensation Force de frottement Sec
-    if(Ec > 0) Ec +=CO2;                                                   // Compensation Force de frottement Sec
+    if(Ec < 0) Ec -=CO2;                                                   // Compensation Force de frottement Sec
 
 
     if (Ec > 0.45) Ec=0.45;                                               // Saturation à 95% du programme
@@ -311,8 +314,10 @@ void reception(char ch)
     if (commande == "CO1")        CO1 = valeur.toFloat();
     if (commande == "CO2")        CO2 = valeur.toFloat();
    
-    if (commande == "Z")          TetaConsigne = 0.15;
-    else if (commande == "z")     TetaConsigne = 0.0;  
+    if (commande == "Z")          VitesseConsigne = 0.004;
+    if (commande == "S")          VitesseConsigne = -0.008;
+    if (commande == "z" || commande == "s")     VitesseConsigne = 0.0;  
+   
 
 
     //Serial.printf("%.2f\n",TetaConsigne);
@@ -340,14 +345,12 @@ void loop()
 
   if (FlagCalcul == 1)
   {
-    Serial.printf("Teta : %.2f | TetaConsigne : %.2f \n",Teta,TetaConsigne);
+    Serial.printf(" %.2f %f\n",kpVitesse, kdVitesse);
     FlagCalcul = 0;
   }
 }
 
 
 // --- Lecture série ---
-
-
 
 
